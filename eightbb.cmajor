@@ -11,15 +11,18 @@ namespace Audolon::EightBB
 
         input value 
         {
-            float in_volumeDB [[ name: "Volume", unit: "dB", min: -120.0f, max: 0.0f, init: -30.0f, step: 0.1f, automatable: true]];
+            float in_volumeDB [[ name: "Volume", unit: "dB", min: -120.0f, max: 0.0f, init: -83.6f, step: 0.1f, automatable: true]];
         }
 
         input event
         {
-            float in_rateMod [[ name: "Rate Mod", min: 0.0f, max: 2.0f, init: 0.5f, step: 0.001f, automatable: true]];
+            float in_rateMod [[ name: "Rate Mod", min: 0.0f, max: 2.0f, init: 0.06f, step: 0.001f, automatable: true]];
 
-            int in_x [[ name: "X", min: 0, max: 32, init: 0, step: 1, automatable: true]];
+            int in_x [[ name: "X", min: 0, max: 32, init: 3, step: 1, automatable: true]];
             int in_y [[ name: "Y", min: 0, max: 32, init: 8, step: 1, automatable: true]];
+            int in_mine [[name: "mine", min:0, max:15, init: 5, step: 1, automatable: true]];
+            int in_mine2 [[name: "mine2", min:0, max:255, init: 0, step: 0, automatable: true]];
+            int in_mine3 [[name: "mine3", min:0, max:30, init: 0, step: 0, automatable: true]];
 
             bool in_1A [[ name: "1A", boolean, init: false, automatable: true]];
             bool in_1B [[ name: "1B", boolean, init: false, automatable: true]];
@@ -40,6 +43,9 @@ namespace Audolon::EightBB
         {
             in_x -> bbgen.in_x;
             in_y -> bbgen.in_y;
+            in_mine -> bbgen.in_mine;
+            in_mine2 -> bbgen.in_mine2;
+            in_mine3 -> bbgen.in_mine3;
             in_rateMod -> bbgen.in_rateMod;
             in_1A -> bbgen.in_1A;
             in_1B -> bbgen.in_1B;
@@ -80,6 +86,9 @@ namespace Audolon::EightBB
         {
             int in_x;
             int in_y;
+            int in_mine;
+            int in_mine2;
+            int in_mine3;
 
             float in_rateMod;
 
@@ -99,6 +108,9 @@ namespace Audolon::EightBB
 
         int m_x;
         int m_y;
+        int m_mine;
+        int m_mine2;
+        int m_mine3;
 
         float m_counter;
         float m_counterIncrement;
@@ -130,7 +142,12 @@ namespace Audolon::EightBB
         event in_3B (bool val) {m_3B = val;}
         event in_4A (bool val) {m_4A = val;}
         event in_4B (bool val) {m_4B = val;}
+        event in_mine(int val) {m_mine = val;}
+        event in_mine2(int val) {m_mine2 = val;}
+        event in_mine3(int val) {m_mine3 = val;}
 
+        std::random::RNG rng;
+        int wi=1;
         void main() 
         {
             loop
@@ -149,7 +166,6 @@ namespace Audolon::EightBB
 
                 u = u ^ ((~(t >>> m_x)) & 0xFFFFFFFF_L);
                 u = CustomWrap(u);
-
 
                 if (!m_4B)
                 {
@@ -183,6 +199,15 @@ namespace Audolon::EightBB
                     u = CustomWrap(u);
                 }
 
+                if (m_mine > 0) {
+                    u /= m_mine;
+
+                    int64 temp1 = CustomWrap(t << m_mine);
+                    u = u ^ (temp1 & (t << m_mine/wi++));
+
+                    u = CustomWrap(u);
+                }
+
                 if (m_4A)
                 {
                     // Reverse 32-bits
@@ -208,6 +233,21 @@ namespace Audolon::EightBB
                     u = (u & 65535);
                 }
 
+                u <<= 8;
+
+                // HERE !!!
+                if (m_mine2 > 0 && u % m_mine2 != 0){
+                    u = u << 4;
+                }
+
+                if (m_mine3 > 0){
+                    //t = t + u/70; 
+                    t = t + u/m_mine3; 
+                    u = u *200;
+                    u = CustomWrap(u^t);
+                }
+
+
                 // Perform playback rate modulation. We are unconcerned with aliasing
                 // since it's preferable in this application.
                 m_counter += m_counterIncrement;
@@ -216,7 +256,7 @@ namespace Audolon::EightBB
                     t = CustomWrap(t + 1);
                     m_counter -= 1.0f;
                 }
-                
+
                 // Shift the output signal to [-1,1]. Note that this has no actual
                 // guarantee that the signal has no DC component.
                 out_audio <- float(u - 32768) / 32768.0f;
